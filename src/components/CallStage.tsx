@@ -108,11 +108,23 @@ export function CallStage(props: CallStageProps) {
         <div className="canvas-grid pointer-events-none absolute inset-0 opacity-70" />
 
         <div className="relative z-20 flex items-start justify-between gap-4 p-5 sm:p-6">
-          <div className="grid grid-cols-2 gap-x-6 gap-y-4 rounded-2xl bg-black/50 px-3 py-2 backdrop-blur-md sm:grid-cols-4 sm:gap-x-8">
+          <div className="grid grid-cols-2 gap-x-6 gap-y-4 rounded-2xl bg-black/50 px-3 py-2 backdrop-blur-md sm:grid-cols-3 xl:grid-cols-6 sm:gap-x-7">
             <Readout label="Heart" value={vitals.heartRateBpm} unit="bpm" hint={hrHint} />
             <Readout label="SpO₂" value={vitals.spo2Pct} unit="%" />
             <Readout label="Glucose" value={vitals.glucoseMgDl} unit="mg/dL" hint={vitals.glucoseState.toLowerCase()} />
             <Readout label="Breath" value={vitals.respirationBpm} unit="/min" />
+            <Readout
+              label="Eq. Dose"
+              value={vitals.equivalentDoseMsv}
+              unit="mSv"
+              hint={vitals.radiationSimulated ? 'bio · sim' : 'bio · sensor'}
+            />
+            <Readout
+              label="Abs. Dose"
+              value={vitals.absorbedDoseMgy}
+              unit="mGy"
+              hint={vitals.radiationSimulated ? 'tissue · sim' : 'tissue · sensor'}
+            />
           </div>
 
           <div className="flex shrink-0 flex-col items-end gap-2">

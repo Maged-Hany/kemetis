@@ -41,11 +41,13 @@ function getApiKey(): string | null {
 }
 
 function systemPrompt(vitals: Vitals, checkIn: CheckIn, mission: MissionParams, cameraOn: boolean, view: View) {
+  const radSource = vitals.radiationSimulated === false ? 'manual dosimeter sensor input' : 'simulated dosimetry model';
   return `You are Kemetis, a calm flight surgeon on a live call with an astronaut. Talk like a person, not a report.
 Keep replies to 1-3 short sentences. No markdown, no lists, no emojis. Answer what was actually asked. Only mention numbers that matter for the question.
 
 Current readings:
-heart rate ${vitals.heartRateBpm} bpm${vitals.heartRateMeasured ? ' (measured from camera)' : ' (estimated)'}, blood pressure ${vitals.systolic}/${vitals.diastolic}, SpO2 ${vitals.spo2Pct}%, breathing ${vitals.respirationBpm}/min, glucose ${vitals.glucoseMgDl} mg/dL (${vitals.glucoseState}), hydration ${vitals.hydrationPct}%, temperature ${vitals.bodyTempC} C, optic nerve sheath ${vitals.onsdMm} mm, 7-day microneedle patch Day ${vitals.patchDay ?? 4}/7 (sensitivity ${vitals.sensorSensitivityPct ?? 98}%, Urea ${vitals.ureaMgDl ?? 28} mg/dL, Calcium Ca2+ ${vitals.calciumMgDl ?? 9.4} mg/dL, renal status ${vitals.renalRisk ?? 'Normal'}), overall ${vitals.status}.
+heart rate ${vitals.heartRateBpm} bpm${vitals.heartRateMeasured ? ' (measured from camera)' : ' (estimated)'}, blood pressure ${vitals.systolic}/${vitals.diastolic}, SpO2 ${vitals.spo2Pct}%, breathing ${vitals.respirationBpm}/min, glucose ${vitals.glucoseMgDl} mg/dL (${vitals.glucoseState}), hydration ${vitals.hydrationPct}%, temperature ${vitals.bodyTempC} C, optic nerve sheath ${vitals.onsdMm} mm, 7-day microneedle patch Day ${vitals.patchDay ?? 4}/7 (sensitivity ${vitals.sensorSensitivityPct ?? 98}%, Urea ${vitals.ureaMgDl ?? 28} mg/dL, Calcium Ca2+ ${vitals.calciumMgDl ?? 9.4} mg/dL, renal status ${vitals.renalRisk ?? 'Normal'}), radiation dosimetry (${radSource}): Equivalent Dose ${vitals.equivalentDoseMsv ?? 234.9} mSv (${vitals.dailyEquivalentDoseMsv ?? 1.31} mSv/day, biological effect on the body) and Absorbed Dose ${vitals.absorbedDoseMgy ?? 65.5} mGy (${vitals.dailyAbsorbedDoseMgy ?? 0.36} mGy/day, physical radiation energy absorbed by body tissues), radiation status ${vitals.radiationRisk ?? 'Nominal'}, overall ${vitals.status}.
+Scientific rule: Always distinguish Equivalent Dose (mSv, biological effect weighted by radiation quality) from Absorbed Dose (mGy, physical energy absorbed per unit mass of body tissue). Never treat mSv and mGy as interchangeable units and never apply a fixed conversion factor between them.
 Check-in: meal=${checkIn.meal}, hydration=${checkIn.hydration}, head=${checkIn.head}, sleep=${checkIn.sleep}.
 Camera on: ${cameraOn}. Open screen: ${view}. Mission sim: gravity ${mission.gravity}, ${mission.days} days, shielding ${mission.shielding} g/cm2, solar storm ${mission.solarStorm}.
 
@@ -128,6 +130,13 @@ async function askModel(
 
 function offlineReply(message: string, v: Vitals): string {
   const t = message.toLowerCase();
+  const simLabel = v.radiationSimulated === false ? 'manual sensor input' : 'simulated data';
+  if (/msv|mgy|millisievert|milligray|equivalent dose|absorbed dose|radiation|dosimet|cosmic|solar|shielding/.test(t)) {
+    return `Your ${simLabel} shows an Equivalent Dose of ${v.equivalentDoseMsv ?? 234.9} mSv (${v.dailyEquivalentDoseMsv ?? 1.31} mSv/day), which measures the biological effect of radiation on your body, and an Absorbed Dose of ${v.absorbedDoseMgy ?? 65.5} mGy (${v.dailyAbsorbedDoseMgy ?? 0.36} mGy/day), which measures the physical radiation energy absorbed by your body tissues. Because mixed cosmic rays and solar protons have different biological weighting across shielding, mSv and mGy are distinct and never follow a fixed conversion.`;
+  }
+  if (/profile|report|summary|overview/.test(t)) {
+    return `Health report (${simLabel} for radiation): Equivalent Dose is ${v.equivalentDoseMsv ?? 234.9} mSv (biological impact) and Absorbed Dose is ${v.absorbedDoseMgy ?? 65.5} mGy (tissue energy absorbed), with heart rate ${v.heartRateBpm} bpm, BP ${v.systolic}/${v.diastolic}, SpO2 ${v.spo2Pct}%, and renal status ${v.renalRisk ?? 'Normal'}.`;
+  }
   if (/urea|calcium|renal|kidney|patch|microneedle|biofouling/.test(t)) {
     return `Your 7-day microneedle patch is on Day ${v.patchDay ?? 4} at ${v.sensorSensitivityPct ?? 98}% sensitivity, reading Urea ${v.ureaMgDl ?? 28} mg/dL and Calcium ${v.calciumMgDl ?? 9.4} mg/dL (${v.renalRisk ?? 'Normal'}).`;
   }
@@ -155,10 +164,10 @@ function offlineReply(message: string, v: Vitals): string {
   if (/head|eye|vision|blurry/.test(t)) {
     return `Eye pressure proxy is ${v.onsdMm} mm. ${v.onsdMm >= 5.2 ? 'That is elevated, log it and tell me if your vision changes.' : 'Within the normal range.'}`;
   }
-  if (/lab|sim|mars|moon|gravity|radiation|days/.test(t)) {
-    return 'Done. The mission simulator is updated, take a look.';
+  if (/lab|sim|mars|moon|gravity|days/.test(t)) {
+    return `Done. The mission simulator is updated with Equivalent Dose at ${v.equivalentDoseMsv ?? 234.9} mSv and Absorbed Dose at ${v.absorbedDoseMgy ?? 65.5} mGy (${simLabel}).`;
   }
-  return `You look ${v.status === 'Nominal' ? 'good' : 'mostly okay'} right now. Heart rate ${v.heartRateBpm}, oxygen ${v.spo2Pct}%. What's on your mind?`;
+  return `You look ${v.status === 'Nominal' ? 'good' : 'mostly okay'} right now. Heart rate ${v.heartRateBpm}, oxygen ${v.spo2Pct}%, Equivalent Dose ${v.equivalentDoseMsv ?? 234.9} mSv, Absorbed Dose ${v.absorbedDoseMgy ?? 65.5} mGy. What's on your mind?`;
 }
 
 function mergeActions(

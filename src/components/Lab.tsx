@@ -202,11 +202,14 @@ export function Lab({ params, output, onChange, onReset, onDiscuss }: LabProps) 
 
         <div className="flex flex-col gap-4">
           <SpotlightCard className="flex flex-wrap items-center justify-between gap-4 rounded-[28px] bg-[#050505]/75 px-6 py-5 backdrop-blur-md">
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <StatusDot status={output.status} />
               <span className="text-[15px] font-medium text-white">{output.status}</span>
               <span className="text-[13px] text-white/45">
                 {GRAVITY.find((g) => g.id === params.gravity)?.label} · {params.days} days
+              </span>
+              <span className="rounded-full border border-white/[0.1] bg-white/[0.03] px-2.5 py-0.5 font-mono text-[10px] text-white/70">
+                Simulated Dosimetry (mSv &amp; mGy)
               </span>
             </div>
             <PressButton
@@ -218,13 +221,15 @@ export function Lab({ params, output, onChange, onReset, onDiscuss }: LabProps) 
             </PressButton>
           </SpotlightCard>
 
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            <Metric index={0} label="Radiation dose" value={output.totalDoseMsv} decimals={0} unit="mSv" ratio={output.totalDoseMsv / 600} warn={output.totalDoseMsv >= 250} danger={output.totalDoseMsv >= 600} />
-            <Metric index={1} label="Daily dose" value={output.dailyDoseMsv} decimals={2} unit="mSv/day" ratio={output.dailyDoseMsv / 15} warn={output.dailyDoseMsv >= 5} danger={output.dailyDoseMsv >= 15} />
-            <Metric index={2} label="Bone loss" value={output.boneLossPct} decimals={1} unit="%" ratio={output.boneLossPct / 8} warn={output.monthlyBoneLossPct >= 0.65} danger={output.boneLossPct >= 8} />
-            <Metric index={3} label="Optic nerve sheath" value={output.onsdMm} decimals={2} unit="mm" ratio={(output.onsdMm - 4.4) / (5.8 - 4.4)} warn={output.onsdMm >= 5.2} danger={output.onsdMm >= 5.8} />
-            <Metric index={4} label="Standing tolerance" value={output.orthostaticPct} unit="%" ratio={output.orthostaticPct / 100} warn={output.orthostaticPct < 80} danger={output.orthostaticPct < 60} />
-            <Metric index={5} label="Reaction time" value={output.reactionMs} unit="ms" ratio={(output.reactionMs - 200) / (340 - 200)} warn={output.reactionMs >= 290} danger={output.reactionMs >= 340} />
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <Metric index={0} label="Equivalent dose (Biological)" value={output.totalDoseMsv} decimals={1} unit="mSv" ratio={output.totalDoseMsv / 600} warn={output.totalDoseMsv >= 250} danger={output.totalDoseMsv >= 600} />
+            <Metric index={1} label="Absorbed dose (Tissue energy)" value={output.totalAbsorbedMgy} decimals={1} unit="mGy" ratio={output.totalAbsorbedMgy / 500} warn={output.totalAbsorbedMgy >= 150} danger={output.totalAbsorbedMgy >= 500} />
+            <Metric index={2} label="Daily equiv. dose" value={output.dailyDoseMsv} decimals={2} unit="mSv/day" ratio={output.dailyDoseMsv / 15} warn={output.dailyDoseMsv >= 5} danger={output.dailyDoseMsv >= 15} />
+            <Metric index={3} label="Daily absorbed dose" value={output.dailyAbsorbedMgy} decimals={2} unit="mGy/day" ratio={output.dailyAbsorbedMgy / 10} warn={output.dailyAbsorbedMgy >= 3} danger={output.dailyAbsorbedMgy >= 10} />
+            <Metric index={4} label="Bone loss" value={output.boneLossPct} decimals={1} unit="%" ratio={output.boneLossPct / 8} warn={output.monthlyBoneLossPct >= 0.65} danger={output.boneLossPct >= 8} />
+            <Metric index={5} label="Optic nerve sheath" value={output.onsdMm} decimals={2} unit="mm" ratio={(output.onsdMm - 4.4) / (5.8 - 4.4)} warn={output.onsdMm >= 5.2} danger={output.onsdMm >= 5.8} />
+            <Metric index={6} label="Standing tolerance" value={output.orthostaticPct} unit="%" ratio={output.orthostaticPct / 100} warn={output.orthostaticPct < 80} danger={output.orthostaticPct < 60} />
+            <Metric index={7} label="Reaction time" value={output.reactionMs} unit="ms" ratio={(output.reactionMs - 200) / (340 - 200)} warn={output.reactionMs >= 290} danger={output.reactionMs >= 340} />
           </div>
         </div>
       </div>
@@ -232,14 +237,15 @@ export function Lab({ params, output, onChange, onReset, onDiscuss }: LabProps) 
       <ScrollCanvasFrame className="relative z-10">
         <div className="rounded-[28px] border border-white/[0.08] bg-[#040404]/80 p-6 backdrop-blur-md">
           <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/[0.06] pb-4">
-            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-white/40">Limits</span>
+            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-white/40">Limits &amp; Dosimetry Distinction (Simulated)</span>
             <ParallaxTrack distance={18} className="hidden font-mono text-[11px] text-white/35 sm:block">
-              600 mSv career · 5.8 mm ONSD · 8% bone threshold
+              600 mSv career (Biological) · 500 mGy tissue energy · 5.8 mm ONSD · 8% bone threshold
             </ParallaxTrack>
           </div>
-          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {[
-              { title: 'Career radiation', current: `${output.totalDoseMsv} mSv`, limit: '600 mSv max', pct: output.totalDoseMsv / 600 },
+              { title: 'Equivalent dose', current: `${output.totalDoseMsv} mSv`, limit: '600 mSv max', pct: output.totalDoseMsv / 600 },
+              { title: 'Absorbed dose', current: `${output.totalAbsorbedMgy} mGy`, limit: '500 mGy max', pct: output.totalAbsorbedMgy / 500 },
               { title: 'Optic sheath', current: `${output.onsdMm} mm`, limit: '5.8 mm threshold', pct: (output.onsdMm - 4.4) / 1.4 },
               { title: 'Bone retention', current: `${(100 - output.boneLossPct).toFixed(1)}%`, limit: '92% min', pct: 1 - output.boneLossPct / 12 },
             ].map((item, idx) => (

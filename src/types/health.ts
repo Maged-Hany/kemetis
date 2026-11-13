@@ -20,6 +20,8 @@ export interface ManualVitalsOverride {
   onsdMm?: number | null;
   ureaMgDl?: number | null;
   calciumMgDl?: number | null;
+  equivalentDoseMsv?: number | null;
+  absorbedDoseMgy?: number | null;
   patchDay?: number;
   zwitterionicShield?: boolean;
   skinTempC?: number;
@@ -56,6 +58,12 @@ export interface Vitals {
   onsdMm: number;
   ureaMgDl: number;
   calciumMgDl: number;
+  equivalentDoseMsv: number;
+  absorbedDoseMgy: number;
+  dailyEquivalentDoseMsv: number;
+  dailyAbsorbedDoseMgy: number;
+  radiationSimulated: boolean;
+  radiationRisk: 'Nominal' | 'Advisory' | 'Critical';
   patchDay: number;
   zwitterionicShield: boolean;
   sensorSensitivityPct: number;
@@ -77,9 +85,22 @@ export interface MissionParams {
   co2MmHg: number;
 }
 
+export interface RadiationTimepoint {
+  day: number;
+  label: string;
+  equivalentDoseMsv: number;
+  absorbedDoseMgy: number;
+  dailyEquivalentMsv: number;
+  dailyAbsorbedMgy: number;
+}
+
 export interface MissionOutput {
   totalDoseMsv: number;
   dailyDoseMsv: number;
+  totalAbsorbedMgy: number;
+  dailyAbsorbedMgy: number;
+  radiationSimulated: boolean;
+  timeline: RadiationTimepoint[];
   onsdMm: number;
   boneLossPct: number;
   monthlyBoneLossPct: number;

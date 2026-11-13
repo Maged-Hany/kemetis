@@ -7,6 +7,7 @@ import { Header } from './components/Header';
 import { Lab } from './components/Lab';
 import { LoginScreen } from './components/LoginScreen';
 import { MicroneedlePatchSection } from './components/MicroneedlePatchSection';
+import { RadiationMonitoringSection } from './components/RadiationMonitoringSection';
 import { VitalsFlowchartSection } from './components/VitalsFlowchartSection';
 import type { VoiceState } from './components/VoiceStageVisualizer';
 import {
@@ -48,7 +49,12 @@ const welcome = (): ChatMessage => ({
 });
 
 export default function App() {
-  const [authenticated, setAuthenticated] = useState(false);
+  const [authenticated, setAuthenticated] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return new URLSearchParams(window.location.search).get('autostart') === '1';
+    }
+    return false;
+  });
   const [view, setView] = useState<View>('call');
   const [callStartedAt, setCallStartedAt] = useState<number | null>(null);
   const [cameraOn, setCameraOn] = useState(false);
@@ -97,8 +103,8 @@ export default function App() {
 
   const measuredBpm = cameraOn ? pulse.bpm : null;
   const vitals = useMemo(
-    () => computeVitals(DEFAULT_OPTICAL, DEFAULT_VOICE, checkIn, measuredBpm, overrides),
-    [checkIn, measuredBpm, overrides]
+    () => computeVitals(DEFAULT_OPTICAL, DEFAULT_VOICE, checkIn, measuredBpm, overrides, mission),
+    [checkIn, measuredBpm, overrides, mission]
   );
   const missionOutput = useMemo(() => simulateMission(mission), [mission]);
 
@@ -279,7 +285,8 @@ export default function App() {
           DEFAULT_VOICE,
           nextCheckIn,
           state.measuredBpm,
-          state.overrides
+          state.overrides,
+          nextMission
         );
 
         setThinking(true);
@@ -548,6 +555,16 @@ export default function App() {
                     skinHumidityPct: prev.skinHumidityPct,
                   }))
                 }
+                onAsk={(question) => {
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                  void send(question);
+                }}
+              />
+
+              <RadiationMonitoringSection
+                vitals={vitals}
+                mission={mission}
+                missionOutput={missionOutput}
                 onAsk={(question) => {
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                   void send(question);

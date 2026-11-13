@@ -81,9 +81,64 @@ test('simulateMission rewards shielding and countermeasures', () => {
   });
 
   assert.ok(protectedMars.totalDoseMsv < unprotected.totalDoseMsv);
+  assert.ok(protectedMars.totalAbsorbedMgy < unprotected.totalAbsorbedMgy);
   assert.ok(protectedMars.onsdMm < unprotected.onsdMm);
   assert.ok(protectedMars.monthlyBoneLossPct < unprotected.monthlyBoneLossPct);
   assert.equal(unprotected.status, 'Critical');
+  assert.equal(protectedMars.radiationSimulated, true);
+  assert.equal(protectedMars.timeline.length, 6);
+});
+
+test('mSv (Equivalent Dose) and mGy (Absorbed Dose) are independent and never use a fixed conversion factor', () => {
+  const thinShieldOrbit = simulateMission({
+    gravity: '0g',
+    days: 180,
+    shielding: 5,
+    solarStorm: false,
+    lbnpMin: 30,
+    exerciseMin: 60,
+    co2MmHg: 2.5,
+  });
+  const thickShieldOrbit = simulateMission({
+    gravity: '0g',
+    days: 180,
+    shielding: 45,
+    solarStorm: false,
+    lbnpMin: 30,
+    exerciseMin: 60,
+    co2MmHg: 2.5,
+  });
+  const solarStormMars = simulateMission({
+    gravity: '0.38g',
+    days: 180,
+    shielding: 10,
+    solarStorm: true,
+    lbnpMin: 30,
+    exerciseMin: 60,
+    co2MmHg: 2.5,
+  });
+
+  const ratioThin = thinShieldOrbit.totalDoseMsv / thinShieldOrbit.totalAbsorbedMgy;
+  const ratioThick = thickShieldOrbit.totalDoseMsv / thickShieldOrbit.totalAbsorbedMgy;
+  const ratioStormMars = solarStormMars.totalDoseMsv / solarStormMars.totalAbsorbedMgy;
+
+  // Verify both units are positive and distinct
+  assert.notEqual(thinShieldOrbit.totalDoseMsv, thinShieldOrbit.totalAbsorbedMgy);
+  // Verify no fixed conversion factor exists between mSv and mGy across shielding and radiation spectra
+  assert.ok(Math.abs(ratioThin - ratioThick) > 0.05);
+  assert.ok(Math.abs(ratioThick - ratioStormMars) > 0.05);
+
+  // Verify independent manual overrides do not convert one unit into the other
+  const autoVitals = computeVitals(DEFAULT_OPTICAL, DEFAULT_VOICE, DEFAULT_CHECKIN, null, {});
+  assert.equal(autoVitals.radiationSimulated, true);
+
+  const manualMsvOnly = computeVitals(DEFAULT_OPTICAL, DEFAULT_VOICE, DEFAULT_CHECKIN, null, {
+    equivalentDoseMsv: 310.5,
+  });
+  assert.equal(manualMsvOnly.equivalentDoseMsv, 310.5);
+  assert.equal(manualMsvOnly.absorbedDoseMgy, autoVitals.absorbedDoseMgy);
+  assert.equal(manualMsvOnly.radiationSimulated, false);
+  assert.equal(manualMsvOnly.radiationRisk, 'Advisory');
 });
 
 test('parseCommands maps speech to actions', () => {

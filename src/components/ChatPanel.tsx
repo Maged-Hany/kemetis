@@ -14,7 +14,7 @@ interface ChatPanelProps {
   onClear: () => void;
 }
 
-const SUGGESTIONS = ["How's my heart?", 'I just ate', 'Feeling tired', 'Open the lab'];
+const SUGGESTIONS = ["How's my heart?", 'Explain mSv vs mGy', 'I just ate', 'Open the lab'];
 
 function time(at: number) {
   return new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });

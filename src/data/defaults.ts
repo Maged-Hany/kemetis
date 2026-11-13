@@ -34,6 +34,8 @@ export const DEFAULT_MANUAL_OVERRIDES: ManualVitalsOverride = {
   onsdMm: null,
   ureaMgDl: null,
   calciumMgDl: null,
+  equivalentDoseMsv: null,
+  absorbedDoseMgy: null,
   patchDay: 4,
   zwitterionicShield: true,
   skinTempC: 33.6,

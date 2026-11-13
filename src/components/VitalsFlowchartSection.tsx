@@ -161,7 +161,7 @@ export function VitalsFlowchartSection({ vitals, onAsk }: VitalsFlowchartSection
             <PressButton
               onClick={() =>
                 onAsk(
-                  `Walk me through my current clinical flowchart: Glucose ${vitals.glucoseMgDl} mg/dL, BP ${vitals.systolic}/${vitals.diastolic} mmHg, SpO2 ${vitals.spo2Pct}%, Urea ${vitals.ureaMgDl} mg/dL, and Ca2+ ${vitals.calciumMgDl} mg/dL.`
+                  `Walk me through my current clinical flowchart: Glucose ${vitals.glucoseMgDl} mg/dL, BP ${vitals.systolic}/${vitals.diastolic} mmHg, SpO2 ${vitals.spo2Pct}%, Urea ${vitals.ureaMgDl} mg/dL, Ca2+ ${vitals.calciumMgDl} mg/dL, Equivalent Dose ${vitals.equivalentDoseMsv} mSv, and Absorbed Dose ${vitals.absorbedDoseMgy} mGy.`
                 )
               }
               className="group inline-flex items-center gap-1.5 rounded-full bg-white px-4 py-2 text-[12px] font-semibold text-black"
@@ -224,7 +224,7 @@ export function VitalsFlowchartSection({ vitals, onAsk }: VitalsFlowchartSection
                 AI Fusion &amp; Calibration Engine
               </div>
               <div className="mt-1 text-[14px] font-semibold text-white">
-                AD5940 AFE ({vitals.afeSignalNa} nA) · Day {vitals.patchDay}/7 ({vitals.sensorSensitivityPct}% sensitivity) · ML Drift ±{vitals.mlDriftCorrectionPct}%
+                AD5940 AFE ({vitals.afeSignalNa} nA) · Day {vitals.patchDay}/7 ({vitals.sensorSensitivityPct}% sensitivity) · Eq. {vitals.equivalentDoseMsv} mSv / Abs. {vitals.absorbedDoseMgy} mGy
               </div>
               <div className="mt-1 font-mono text-[11px]" style={{ color: toneColor(hubTone) }}>
                 System Triage: {vitals.status.toUpperCase()}

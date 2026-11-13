@@ -1,4 +1,4 @@
-import { DEFAULT_CHECKIN, DEFAULT_MANUAL_OVERRIDES } from '../data/defaults';
+import { DEFAULT_CHECKIN, DEFAULT_MANUAL_OVERRIDES, DEFAULT_MISSION } from '../data/defaults';
 import type {
   Action,
   CheckIn,
@@ -7,6 +7,7 @@ import type {
   MissionOutput,
   MissionParams,
   OpticalSample,
+  RadiationTimepoint,
   Vitals,
   VoiceSample,
 } from '../types/health';
@@ -19,12 +20,97 @@ function isNum(v: unknown): v is number {
   return typeof v === 'number' && Number.isFinite(v);
 }
 
+const UNLOADING: Record<GravityMode, number> = { '0g': 1, '0.16g': 0.72, '0.38g': 0.46, '1g': 0.02 };
+
+/**
+ * Equivalent Dose rate baseline (mSv/day) — Biological effect weighted by radiation quality (GCR HZE ions + secondary neutrons).
+ */
+const RADIATION: Record<GravityMode, number> = { '0g': 1.45, '0.16g': 0.92, '0.38g': 0.64, '1g': 0.008 };
+
+/**
+ * Physical Absorbed Dose components (mGy/day) — Energy deposited per unit tissue mass (1 mGy = 1 mJ/kg)
+ * separated into low-LET proton/gamma fluence and high-LET HZE/neutron fluence.
+ * Shielding and solar events affect physical energy deposition (mGy) and biological quality weighting (mSv) differently,
+ * so mSv and mGy never follow a fixed conversion ratio.
+ */
+const LOW_LET_ABSORBED_MGY: Record<GravityMode, number> = { '0g': 0.34, '0.16g': 0.21, '0.38g': 0.16, '1g': 0.0052 };
+const HIGH_LET_ABSORBED_MGY: Record<GravityMode, number> = { '0g': 0.14, '0.16g': 0.11, '0.38g': 0.085, '1g': 0.0008 };
+const NEUTRON_ALBEDO_FACTOR: Record<GravityMode, number> = { '0g': 0.06, '0.16g': 0.14, '0.38g': 0.19, '1g': 0.01 };
+
+function computeRadiationDoses(p: MissionParams): {
+  dailyDoseMsv: number;
+  totalDoseMsv: number;
+  dailyAbsorbedMgy: number;
+  totalAbsorbedMgy: number;
+  timeline: RadiationTimepoint[];
+} {
+  // Biological equivalent dose (mSv) attenuation & SPE biological weighting
+  const bioAttenuation = clamp(1 - (p.shielding - 10) * 0.011, 0.48, 1.15);
+  const dailyDoseMsv = Number(
+    clamp(RADIATION[p.gravity] * bioAttenuation + (p.solarStorm ? 28.5 * bioAttenuation : 0), 0.01, 65).toFixed(2)
+  );
+  const totalDoseMsv = Number(
+    clamp(p.days * RADIATION[p.gravity] * bioAttenuation + (p.solarStorm ? 85 * bioAttenuation : 0), 0.1, 2500).toFixed(1)
+  );
+
+  // Physical tissue absorbed dose (mGy = mJ/kg) — low-LET protons attenuate steeply with shielding mass,
+  // while high-LET ions produce secondary spallation fragments in thicker shielding + surface albedo.
+  const protonTransmission = Math.exp(-(p.shielding - 5) * 0.026);
+  const hzeTransmission = clamp(1 - (p.shielding - 5) * 0.0065, 0.62, 1.05);
+  const secondarySpallationMgy = (p.shielding / 50) * NEUTRON_ALBEDO_FACTOR[p.gravity] * 0.18;
+
+  const baseDailyAbsorbedMgy =
+    LOW_LET_ABSORBED_MGY[p.gravity] * protonTransmission +
+    HIGH_LET_ABSORBED_MGY[p.gravity] * hzeTransmission +
+    secondarySpallationMgy;
+
+  // Solar Particle Events deposit high proton energy in tissue (mGy), attenuated exponentially by hull shielding
+  const speDailyMgy = p.solarStorm ? 19.4 * Math.exp(-(p.shielding - 5) * 0.034) : 0;
+  const speBurstMgy = p.solarStorm ? 58.0 * Math.exp(-(p.shielding - 5) * 0.034) : 0;
+
+  const dailyAbsorbedMgy = Number(clamp(baseDailyAbsorbedMgy + speDailyMgy, 0.005, 48).toFixed(2));
+  const totalAbsorbedMgy = Number(
+    clamp(p.days * baseDailyAbsorbedMgy + speBurstMgy, 0.05, 1800).toFixed(1)
+  );
+
+  const fractions = [0.15, 0.3, 0.5, 0.7, 0.85, 1.0];
+  const timeline: RadiationTimepoint[] = fractions.map((f, idx) => {
+    const day = Math.max(1, Math.round(p.days * f));
+    const stormOccurred = p.solarStorm && idx >= 2;
+    const eqMsv = Number(
+      clamp(
+        day * RADIATION[p.gravity] * bioAttenuation + (stormOccurred ? 85 * bioAttenuation * ((idx - 1) / 4) : 0),
+        0.05,
+        2500
+      ).toFixed(1)
+    );
+    const absMgy = Number(
+      clamp(
+        day * baseDailyAbsorbedMgy + (stormOccurred ? speBurstMgy * ((idx - 1) / 4) : 0),
+        0.02,
+        1800
+      ).toFixed(1)
+    );
+    return {
+      day,
+      label: `D${day}`,
+      equivalentDoseMsv: eqMsv,
+      absorbedDoseMgy: absMgy,
+      dailyEquivalentMsv: dailyDoseMsv,
+      dailyAbsorbedMgy: dailyAbsorbedMgy,
+    };
+  });
+
+  return { dailyDoseMsv, totalDoseMsv, dailyAbsorbedMgy, totalAbsorbedMgy, timeline };
+}
+
 export function computeVitals(
   optical: OpticalSample,
   voice: VoiceSample,
   checkIn: CheckIn = DEFAULT_CHECKIN,
   measuredHeartRate: number | null = null,
-  overrides: ManualVitalsOverride = DEFAULT_MANUAL_OVERRIDES
+  overrides: ManualVitalsOverride = DEFAULT_MANUAL_OVERRIDES,
+  mission: MissionParams = DEFAULT_MISSION
 ): Vitals {
   const ratio = clamp(optical.redAcDc / Math.max(0.0005, optical.greenAcDc), 0.4, 1.35);
   const autoSpo2 = Math.round(clamp(110 - 25 * ratio, 86, 100));
@@ -133,6 +219,34 @@ export function computeVitals(
     ? Number(clamp(overrides.calciumMgDl, 6.5, 12.5).toFixed(2))
     : autoCalcium;
 
+  const radSim = computeRadiationDoses(mission);
+  const hasManualMsv = isNum(overrides.equivalentDoseMsv);
+  const hasManualMgy = isNum(overrides.absorbedDoseMgy);
+  const radiationSimulated = !hasManualMsv && !hasManualMgy;
+
+  const equivalentDoseMsv = hasManualMsv
+    ? Number(clamp(overrides.equivalentDoseMsv as number, 0, 2500).toFixed(1))
+    : radSim.totalDoseMsv;
+
+  const absorbedDoseMgy = hasManualMgy
+    ? Number(clamp(overrides.absorbedDoseMgy as number, 0, 1800).toFixed(1))
+    : radSim.totalAbsorbedMgy;
+
+  const dailyEquivalentDoseMsv = hasManualMsv
+    ? Number(clamp(equivalentDoseMsv / Math.max(1, mission.days), 0.01, 65).toFixed(2))
+    : radSim.dailyDoseMsv;
+
+  const dailyAbsorbedDoseMgy = hasManualMgy
+    ? Number(clamp(absorbedDoseMgy / Math.max(1, mission.days), 0.005, 48).toFixed(2))
+    : radSim.dailyAbsorbedMgy;
+
+  let radiationRisk: Vitals['radiationRisk'] = 'Nominal';
+  if (equivalentDoseMsv >= 600 || absorbedDoseMgy >= 500 || dailyEquivalentDoseMsv >= 15 || dailyAbsorbedDoseMgy >= 10) {
+    radiationRisk = 'Critical';
+  } else if (equivalentDoseMsv >= 250 || absorbedDoseMgy >= 150 || dailyEquivalentDoseMsv >= 5 || dailyAbsorbedDoseMgy >= 3) {
+    radiationRisk = 'Advisory';
+  }
+
   const afeSignalNa = Number(
     clamp((ureaMgDl * 0.34 + calciumMgDl * 0.85) * (sensorSensitivityPct / 100), 4.2, 48).toFixed(1)
   );
@@ -167,7 +281,9 @@ export function computeVitals(
       isNum(overrides.bodyTempC) ||
       isNum(overrides.onsdMm) ||
       isNum(overrides.ureaMgDl) ||
-      isNum(overrides.calciumMgDl)
+      isNum(overrides.calciumMgDl) ||
+      hasManualMsv ||
+      hasManualMgy
   );
 
   let status: Vitals['status'] = 'Nominal';
@@ -178,7 +294,8 @@ export function computeVitals(
     onsdMm >= 5.8 ||
     glucoseMgDl <= 68 ||
     glucoseMgDl >= 165 ||
-    renalRisk === 'Early Renal Alert'
+    renalRisk === 'Early Renal Alert' ||
+    radiationRisk === 'Critical'
   ) {
     status = 'Critical';
   } else if (
@@ -189,7 +306,8 @@ export function computeVitals(
     glucoseMgDl <= 76 ||
     glucoseMgDl >= 142 ||
     hydrationPct < 75 ||
-    renalRisk === 'Watch'
+    renalRisk === 'Watch' ||
+    radiationRisk === 'Advisory'
   ) {
     status = 'Advisory';
   }
@@ -209,6 +327,12 @@ export function computeVitals(
     onsdMm,
     ureaMgDl,
     calciumMgDl,
+    equivalentDoseMsv,
+    absorbedDoseMgy,
+    dailyEquivalentDoseMsv,
+    dailyAbsorbedDoseMgy,
+    radiationSimulated,
+    radiationRisk,
     patchDay,
     zwitterionicShield,
     sensorSensitivityPct,
@@ -221,20 +345,11 @@ export function computeVitals(
   };
 }
 
-const UNLOADING: Record<GravityMode, number> = { '0g': 1, '0.16g': 0.72, '0.38g': 0.46, '1g': 0.02 };
-const RADIATION: Record<GravityMode, number> = { '0g': 1.45, '0.16g': 0.92, '0.38g': 0.64, '1g': 0.008 };
-
 export function simulateMission(p: MissionParams): MissionOutput {
   const unloading = UNLOADING[p.gravity];
   const months = Math.max(0.25, p.days / 30);
-  const attenuation = clamp(1 - (p.shielding - 10) * 0.011, 0.48, 1.15);
 
-  const dailyDoseMsv = Number(
-    clamp(RADIATION[p.gravity] * attenuation + (p.solarStorm ? 28.5 * attenuation : 0), 0.01, 65).toFixed(2)
-  );
-  const totalDoseMsv = Number(
-    clamp(p.days * RADIATION[p.gravity] * attenuation + (p.solarStorm ? 85 * attenuation : 0), 0.1, 2500).toFixed(1)
-  );
+  const { dailyDoseMsv, totalDoseMsv, dailyAbsorbedMgy, totalAbsorbedMgy, timeline } = computeRadiationDoses(p);
 
   const lbnp = clamp(p.lbnpMin / 60, 0, 1) * 0.62;
   const co2 = Math.max(0, p.co2MmHg - 2.5) * 0.12;
@@ -259,13 +374,40 @@ export function simulateMission(p: MissionParams): MissionOutput {
   );
 
   let status: MissionOutput['status'] = 'Nominal';
-  if (onsdMm >= 5.8 || totalDoseMsv >= 600 || dailyDoseMsv >= 15 || boneLossPct >= 8 || reactionMs >= 340) {
+  if (
+    onsdMm >= 5.8 ||
+    totalDoseMsv >= 600 ||
+    totalAbsorbedMgy >= 500 ||
+    dailyDoseMsv >= 15 ||
+    dailyAbsorbedMgy >= 10 ||
+    boneLossPct >= 8 ||
+    reactionMs >= 340
+  ) {
     status = 'Critical';
-  } else if (onsdMm >= 5.2 || totalDoseMsv >= 250 || monthlyBoneLossPct >= 0.65 || reactionMs >= 290) {
+  } else if (
+    onsdMm >= 5.2 ||
+    totalDoseMsv >= 250 ||
+    totalAbsorbedMgy >= 150 ||
+    monthlyBoneLossPct >= 0.65 ||
+    reactionMs >= 290
+  ) {
     status = 'Advisory';
   }
 
-  return { totalDoseMsv, dailyDoseMsv, onsdMm, boneLossPct, monthlyBoneLossPct, orthostaticPct, reactionMs, status };
+  return {
+    totalDoseMsv,
+    dailyDoseMsv,
+    totalAbsorbedMgy,
+    dailyAbsorbedMgy,
+    radiationSimulated: true,
+    timeline,
+    onsdMm,
+    boneLossPct,
+    monthlyBoneLossPct,
+    orthostaticPct,
+    reactionMs,
+    status,
+  };
 }
 
 const has = (text: string, ...words: string[]) => words.some((w) => text.includes(w));

@@ -108,6 +108,8 @@ export function CheckInSection({
     { key: 'hydrationPct', label: 'Hydration', unit: '%', min: 40, max: 100, liveValue: vitals.hydrationPct },
     { key: 'ureaMgDl', label: 'ISF Urea', unit: 'mg/dL', min: 10, max: 120, liveValue: vitals.ureaMgDl },
     { key: 'calciumMgDl', label: 'ISF Calcium (Ca²⁺)', unit: 'mg/dL', min: 6.5, max: 12.5, step: 0.1, liveValue: vitals.calciumMgDl },
+    { key: 'equivalentDoseMsv', label: 'Equivalent Dose (Biological)', unit: 'mSv', min: 0, max: 2500, step: 0.1, liveValue: vitals.equivalentDoseMsv },
+    { key: 'absorbedDoseMgy', label: 'Absorbed Dose (Tissue Energy)', unit: 'mGy', min: 0, max: 1800, step: 0.1, liveValue: vitals.absorbedDoseMgy },
   ];
 
   return (
@@ -129,6 +131,10 @@ export function CheckInSection({
               <span>UREA {vitals.ureaMgDl} mg/dL</span>
               <span>·</span>
               <span>Ca²⁺ {vitals.calciumMgDl} mg/dL</span>
+              <span>·</span>
+              <span>EQ {vitals.equivalentDoseMsv} mSv</span>
+              <span>·</span>
+              <span>ABS {vitals.absorbedDoseMgy} mGy</span>
             </ParallaxTrack>
           </div>
 
@@ -211,6 +217,17 @@ export function CheckInSection({
                 >
                   Preset: Renal Alert (↑Urea ↓Ca²⁺)
                 </PressButton>
+                <PressButton
+                  onClick={() =>
+                    onOverrideChange({
+                      equivalentDoseMsv: 342.0,
+                      absorbedDoseMgy: 168.5,
+                    })
+                  }
+                  className="rounded-full border border-white/[0.09] px-3 py-1 text-[11px] text-white/65 transition-colors hover:border-white/25 hover:text-white"
+                >
+                  Preset: Elevated Radiation (mSv &amp; mGy)
+                </PressButton>
                 {vitals.manualActive && (
                   <PressButton
                     onClick={onResetOverrides}
@@ -223,7 +240,7 @@ export function CheckInSection({
               </div>
             </div>
 
-            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
               {manualFields.map((field) => {
                 const rawVal = overrides[field.key];
                 const isOverridden = typeof rawVal === 'number' && Number.isFinite(rawVal);
@@ -275,7 +292,7 @@ export function CheckInSection({
             </div>
           </div>
 
-          <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {[
               {
                 label: 'Blood pressure',
@@ -301,6 +318,14 @@ export function CheckInSection({
                 warn: vitals.renalRisk !== 'Normal',
                 prompt: `My microneedle patch reads Urea ${vitals.ureaMgDl} mg/dL and Calcium ${vitals.calciumMgDl} mg/dL (${vitals.renalRisk}). Explain what this means for my kidneys.`,
               },
+              {
+                label: `Radiation (${vitals.radiationSimulated ? 'Simulated' : 'Sensor'})`,
+                value: `${vitals.equivalentDoseMsv} / ${vitals.absorbedDoseMgy}`,
+                unit: 'mSv / mGy',
+                ratio: vitals.equivalentDoseMsv / 600,
+                warn: vitals.radiationRisk !== 'Nominal',
+                prompt: `My Equivalent Dose is ${vitals.equivalentDoseMsv} mSv and Absorbed Dose is ${vitals.absorbedDoseMgy} mGy. Explain both measurements and what they mean for my body.`,
+              },
             ].map((item, idx) => {
               const barColor = item.warn ? '#ffd60a' : '#ffffff';
               return (
@@ -315,6 +340,7 @@ export function CheckInSection({
                     <div className="flex items-center justify-between">
                       <span className="text-[12px] text-white/45">{item.label}</span>
                       <PressButton
+                        aria-label={`Ask about ${item.label}`}
                         onClick={() => onAsk(item.prompt)}
                         className="group inline-flex items-center gap-1 rounded-full border border-white/[0.08] px-2.5 py-1 text-[11px] text-white/65 transition-colors hover:border-white/25 hover:text-white"
                       >
