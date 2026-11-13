@@ -5,13 +5,30 @@ import { ChatPanel } from './components/ChatPanel';
 import { CheckInSection } from './components/CheckInSection';
 import { Header } from './components/Header';
 import { Lab } from './components/Lab';
+import { LoginScreen } from './components/LoginScreen';
+import { MicroneedlePatchSection } from './components/MicroneedlePatchSection';
+import { VitalsFlowchartSection } from './components/VitalsFlowchartSection';
 import type { VoiceState } from './components/VoiceStageVisualizer';
-import { DEFAULT_CHECKIN, DEFAULT_MISSION, DEFAULT_OPTICAL, DEFAULT_VOICE } from './data/defaults';
+import {
+  DEFAULT_CHECKIN,
+  DEFAULT_MANUAL_OVERRIDES,
+  DEFAULT_MISSION,
+  DEFAULT_OPTICAL,
+  DEFAULT_VOICE,
+} from './data/defaults';
 import { computeVitals, parseCommands, simulateMission } from './engine/physiology';
 import { useMicLevel } from './hooks/useMicLevel';
 import { usePulse } from './hooks/usePulse';
 import { createRecognizer, speak, stopSpeaking } from './lib/speech';
-import type { Action, ChatMessage, CheckIn, GravityMode, MissionParams, View } from './types/health';
+import type {
+  Action,
+  ChatMessage,
+  CheckIn,
+  GravityMode,
+  ManualVitalsOverride,
+  MissionParams,
+  View,
+} from './types/health';
 
 const GRAVITY_NAME: Record<GravityMode, string> = { '0g': 'Orbit', '0.16g': 'Moon', '0.38g': 'Mars', '1g': 'Earth' };
 const GREETINGS = [
@@ -31,6 +48,7 @@ const welcome = (): ChatMessage => ({
 });
 
 export default function App() {
+  const [authenticated, setAuthenticated] = useState(false);
   const [view, setView] = useState<View>('call');
   const [callStartedAt, setCallStartedAt] = useState<number | null>(null);
   const [cameraOn, setCameraOn] = useState(false);
@@ -42,6 +60,7 @@ export default function App() {
   const [interim, setInterim] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>(() => [welcome()]);
   const [checkIn, setCheckIn] = useState<CheckIn>(DEFAULT_CHECKIN);
+  const [overrides, setOverrides] = useState<ManualVitalsOverride>(DEFAULT_MANUAL_OVERRIDES);
   const [mission, setMission] = useState<MissionParams>(DEFAULT_MISSION);
   const [toast, setToast] = useState<string | null>(null);
   const [online, setOnline] = useState<boolean | null>(null);
@@ -70,21 +89,43 @@ export default function App() {
       .catch(() => setOnline(false));
   }, []);
 
-  const micLevel = useMicLevel(micOn, (message) => {
+  const micLevel = useMicLevel(micOn && authenticated, (message) => {
     notify(message);
     setMicOn(false);
   });
-  const pulse = usePulse(videoRef, cameraOn && view === 'call');
+  const pulse = usePulse(videoRef, cameraOn && view === 'call' && authenticated);
 
   const measuredBpm = cameraOn ? pulse.bpm : null;
   const vitals = useMemo(
-    () => computeVitals(DEFAULT_OPTICAL, DEFAULT_VOICE, checkIn, measuredBpm),
-    [checkIn, measuredBpm]
+    () => computeVitals(DEFAULT_OPTICAL, DEFAULT_VOICE, checkIn, measuredBpm, overrides),
+    [checkIn, measuredBpm, overrides]
   );
   const missionOutput = useMemo(() => simulateMission(mission), [mission]);
 
-  const live = useRef({ checkIn, mission, view, cameraOn, micOn, inCall, speakerOn, measuredBpm, messages });
-  live.current = { checkIn, mission, view, cameraOn, micOn, inCall, speakerOn, measuredBpm, messages };
+  const live = useRef({
+    checkIn,
+    overrides,
+    mission,
+    view,
+    cameraOn,
+    micOn,
+    inCall,
+    speakerOn,
+    measuredBpm,
+    messages,
+  });
+  live.current = {
+    checkIn,
+    overrides,
+    mission,
+    view,
+    cameraOn,
+    micOn,
+    inCall,
+    speakerOn,
+    measuredBpm,
+    messages,
+  };
 
   const attachVideo = useCallback((el: HTMLVideoElement | null) => {
     videoRef.current = el;
@@ -233,7 +274,13 @@ export default function App() {
           if (a.type === 'SWITCH_VIEW') nextView = a.view;
         }
         const localLabels = runActions(local);
-        const vitalsNow = computeVitals(DEFAULT_OPTICAL, DEFAULT_VOICE, nextCheckIn, state.measuredBpm);
+        const vitalsNow = computeVitals(
+          DEFAULT_OPTICAL,
+          DEFAULT_VOICE,
+          nextCheckIn,
+          state.measuredBpm,
+          state.overrides
+        );
 
         setThinking(true);
         let reply = 'I lost the connection for a second. Can you say that again?';
@@ -283,7 +330,7 @@ export default function App() {
   const sendRef = useRef(send);
   sendRef.current = send;
 
-  const wantListen = inCall && micOn && !thinking && !speaking;
+  const wantListen = authenticated && inCall && micOn && !thinking && !speaking;
 
   useEffect(() => {
     if (!wantListen) {
@@ -388,6 +435,15 @@ export default function App() {
     ]);
   }, [callStartedAt, quiet, setCamera]);
 
+  const handleLogout = useCallback(() => {
+    quiet();
+    setInterim('');
+    setMicOn(false);
+    void setCamera(false);
+    setCallStartedAt(null);
+    setAuthenticated(false);
+  }, [quiet, setCamera]);
+
   const toggleSpeaker = useCallback(() => {
     setSpeakerOn((on) => {
       if (on) quiet();
@@ -421,9 +477,19 @@ export default function App() {
           ? 'listening'
           : 'idle';
 
+  if (!authenticated) {
+    return <LoginScreen onSuccess={() => setAuthenticated(true)} />;
+  }
+
   return (
     <div className="min-h-screen bg-black text-white">
-      <Header view={view} onView={setView} callStartedAt={callStartedAt} online={online} />
+      <Header
+        view={view}
+        onView={setView}
+        callStartedAt={callStartedAt}
+        online={online}
+        onLogout={handleLogout}
+      />
 
       <main className="mx-auto w-full max-w-[1440px] px-4 pt-4 pb-6 sm:px-6 sm:pt-5">
         <AnimatePresence mode="wait" initial={false}>
@@ -469,8 +535,37 @@ export default function App() {
 
               <CheckInSection
                 checkIn={checkIn}
+                overrides={overrides}
                 vitals={vitals}
                 onChange={(patch) => setCheckIn((prev) => ({ ...prev, ...patch }))}
+                onOverrideChange={(patch) => setOverrides((prev) => ({ ...prev, ...patch }))}
+                onResetOverrides={() =>
+                  setOverrides((prev) => ({
+                    ...DEFAULT_MANUAL_OVERRIDES,
+                    patchDay: prev.patchDay,
+                    zwitterionicShield: prev.zwitterionicShield,
+                    skinTempC: prev.skinTempC,
+                    skinHumidityPct: prev.skinHumidityPct,
+                  }))
+                }
+                onAsk={(question) => {
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                  void send(question);
+                }}
+              />
+
+              <MicroneedlePatchSection
+                vitals={vitals}
+                overrides={overrides}
+                onOverrideChange={(patch) => setOverrides((prev) => ({ ...prev, ...patch }))}
+                onAsk={(question) => {
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                  void send(question);
+                }}
+              />
+
+              <VitalsFlowchartSection
+                vitals={vitals}
                 onAsk={(question) => {
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                   void send(question);

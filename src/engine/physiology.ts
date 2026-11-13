@@ -1,8 +1,9 @@
-import { DEFAULT_CHECKIN } from '../data/defaults';
+import { DEFAULT_CHECKIN, DEFAULT_MANUAL_OVERRIDES } from '../data/defaults';
 import type {
   Action,
   CheckIn,
   GravityMode,
+  ManualVitalsOverride,
   MissionOutput,
   MissionParams,
   OpticalSample,
@@ -14,14 +15,20 @@ export function clamp(val: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, val));
 }
 
+function isNum(v: unknown): v is number {
+  return typeof v === 'number' && Number.isFinite(v);
+}
+
 export function computeVitals(
   optical: OpticalSample,
   voice: VoiceSample,
   checkIn: CheckIn = DEFAULT_CHECKIN,
-  measuredHeartRate: number | null = null
+  measuredHeartRate: number | null = null,
+  overrides: ManualVitalsOverride = DEFAULT_MANUAL_OVERRIDES
 ): Vitals {
   const ratio = clamp(optical.redAcDc / Math.max(0.0005, optical.greenAcDc), 0.4, 1.35);
-  const spo2Pct = Math.round(clamp(110 - 25 * ratio, 86, 100));
+  const autoSpo2 = Math.round(clamp(110 - 25 * ratio, 86, 100));
+  const spo2Pct = isNum(overrides.spo2Pct) ? Math.round(clamp(overrides.spo2Pct, 70, 100)) : autoSpo2;
 
   const pulsatile = clamp(optical.greenAcDc * 1000, 4, 42);
   const vocalLoad = (100 - voice.stabilityPct) * 0.35;
@@ -29,10 +36,10 @@ export function computeVitals(
   const dehydration = checkIn.hydration === 'thirsty' ? 7 : 0;
 
   const modelHeartRate = 62 + (pulsatile - 15) * 0.55 + vocalLoad + workout + dehydration;
-  const heartRateMeasured = measuredHeartRate !== null && Number.isFinite(measuredHeartRate);
-  const heartRateBpm = Math.round(
-    clamp(heartRateMeasured ? (measuredHeartRate as number) : modelHeartRate, 40, 180)
-  );
+  const heartRateMeasured = !isNum(overrides.heartRateBpm) && isNum(measuredHeartRate);
+  const heartRateBpm = isNum(overrides.heartRateBpm)
+    ? Math.round(clamp(overrides.heartRateBpm, 35, 200))
+    : Math.round(clamp(heartRateMeasured ? (measuredHeartRate as number) : modelHeartRate, 40, 180));
 
   const hrvMs = Math.round(
     clamp(
@@ -42,12 +49,17 @@ export function computeVitals(
     )
   );
 
-  const respirationBpm = Math.round(
+  const autoRespiration = Math.round(
     clamp(voice.respirationBpm + (checkIn.sleep === 'post_workout' ? 4 : 0), 9, 30)
   );
+  const respirationBpm = isNum(overrides.respirationBpm)
+    ? Math.round(clamp(overrides.respirationBpm, 6, 40))
+    : autoRespiration;
 
-  const systolic = Math.round(clamp(114 + (heartRateBpm - 64) * 0.45 + (70 - hrvMs) * 0.25, 96, 162));
-  const diastolic = Math.round(clamp(74 + (heartRateBpm - 64) * 0.25 + (70 - hrvMs) * 0.15, 60, 104));
+  const autoSystolic = Math.round(clamp(114 + (heartRateBpm - 64) * 0.45 + (70 - hrvMs) * 0.25, 96, 162));
+  const autoDiastolic = Math.round(clamp(74 + (heartRateBpm - 64) * 0.25 + (70 - hrvMs) * 0.15, 60, 104));
+  const systolic = isNum(overrides.systolic) ? Math.round(clamp(overrides.systolic, 75, 220)) : autoSystolic;
+  const diastolic = isNum(overrides.diastolic) ? Math.round(clamp(overrides.diastolic, 45, 140)) : autoDiastolic;
 
   const glucoseBase: Record<CheckIn['meal'], [number, string]> = {
     normal: [92, 'Steady'],
@@ -55,33 +67,129 @@ export function computeVitals(
     fasting: [79, 'Fasting'],
     shaky: [71, 'Running low'],
   };
-  const [baseGlucose, glucoseState] = glucoseBase[checkIn.meal];
+  const [baseGlucose, baseState] = glucoseBase[checkIn.meal];
   const sleepBump = checkIn.sleep === 'short' ? 9 : 0;
   const stressBump = Math.max(0, (65 - hrvMs) * 0.18);
-  const glucoseMgDl = Math.round(clamp(baseGlucose + sleepBump + stressBump, 65, 185));
+  const autoGlucose = Math.round(clamp(baseGlucose + sleepBump + stressBump, 65, 185));
+  const glucoseMgDl = isNum(overrides.glucoseMgDl)
+    ? Math.round(clamp(overrides.glucoseMgDl, 40, 320))
+    : autoGlucose;
 
-  const hydrationPct = checkIn.hydration === 'good' ? 92 : checkIn.hydration === 'moderate' ? 81 : 69;
+  const glucoseState = isNum(overrides.glucoseMgDl)
+    ? glucoseMgDl < 75
+      ? 'Running low'
+      : glucoseMgDl <= 115
+        ? 'Steady'
+        : glucoseMgDl <= 145
+          ? 'Post-meal rise'
+          : 'Elevated'
+    : baseState;
 
-  const bodyTempC = Number(
+  const autoHydration = checkIn.hydration === 'good' ? 92 : checkIn.hydration === 'moderate' ? 81 : 69;
+  const hydrationPct = isNum(overrides.hydrationPct)
+    ? Math.round(clamp(overrides.hydrationPct, 40, 100))
+    : autoHydration;
+
+  const autoTemp = Number(
     clamp(36.6 + (checkIn.sleep === 'post_workout' ? 0.5 : 0) + (heartRateBpm - 65) * 0.008, 36.1, 38.4).toFixed(1)
   );
+  const bodyTempC = isNum(overrides.bodyTempC)
+    ? Number(clamp(overrides.bodyTempC, 35.0, 41.0).toFixed(1))
+    : autoTemp;
 
   const redBlue = optical.redMean / Math.max(1, optical.blueMean);
   const headBump = checkIn.head === 'headache' ? 0.55 : checkIn.head === 'pressure' ? 0.25 : 0;
-  const onsdMm = Number(
+  const autoOnsd = Number(
     clamp(4.55 + Math.max(0, redBlue - 1.15) * 1.1 + headBump + (100 - hrvMs) * 0.004, 4.4, 6.4).toFixed(2)
+  );
+  const onsdMm = isNum(overrides.onsdMm)
+    ? Number(clamp(overrides.onsdMm, 4.0, 7.2).toFixed(2))
+    : autoOnsd;
+
+  const patchDay = clamp(Math.round(overrides.patchDay ?? 4), 1, 7);
+  const zwitterionicShield = overrides.zwitterionicShield ?? true;
+  const skinTempC = clamp(overrides.skinTempC ?? 33.6, 30, 39);
+  const skinHumidityPct = clamp(overrides.skinHumidityPct ?? 46, 15, 95);
+
+  const sensorSensitivityPct = zwitterionicShield
+    ? Math.round(clamp(99.4 - (patchDay - 1) * 0.55, 95, 100))
+    : Math.round(
+        patchDay <= 3
+          ? 98 - (patchDay - 1) * 2.5
+          : 93 - (patchDay - 3) * 9.8
+      );
+
+  const autoUrea = Math.round(
+    clamp(28 + (92 - hydrationPct) * 0.45 + (checkIn.sleep === 'post_workout' ? 5 : 0), 14, 75)
+  );
+  const ureaMgDl = isNum(overrides.ureaMgDl)
+    ? Math.round(clamp(overrides.ureaMgDl, 10, 120))
+    : autoUrea;
+
+  const autoCalcium = Number(
+    clamp(9.4 - (92 - hydrationPct) * 0.018 - (checkIn.sleep === 'short' ? 0.15 : 0), 7.4, 11.2).toFixed(2)
+  );
+  const calciumMgDl = isNum(overrides.calciumMgDl)
+    ? Number(clamp(overrides.calciumMgDl, 6.5, 12.5).toFixed(2))
+    : autoCalcium;
+
+  const afeSignalNa = Number(
+    clamp((ureaMgDl * 0.34 + calciumMgDl * 0.85) * (sensorSensitivityPct / 100), 4.2, 48).toFixed(1)
+  );
+
+  const mlDriftCorrectionPct = Number(
+    clamp(
+      Math.abs(skinTempC - 33.5) * 0.85 +
+        Math.abs(skinHumidityPct - 45) * 0.055 +
+        (100 - sensorSensitivityPct) * 0.22,
+      0.4,
+      14.5
+    ).toFixed(1)
+  );
+
+  const batteryPct = Math.round(clamp(100 - (patchDay - 1) * 12.5, 12, 100));
+
+  let renalRisk: Vitals['renalRisk'] = 'Normal';
+  if (ureaMgDl >= 42 && calciumMgDl <= 8.6) {
+    renalRisk = 'Early Renal Alert';
+  } else if (ureaMgDl >= 38 || calciumMgDl <= 8.8 || hydrationPct < 75) {
+    renalRisk = 'Watch';
+  }
+
+  const manualActive = Boolean(
+    isNum(overrides.glucoseMgDl) ||
+      isNum(overrides.systolic) ||
+      isNum(overrides.diastolic) ||
+      isNum(overrides.heartRateBpm) ||
+      isNum(overrides.spo2Pct) ||
+      isNum(overrides.respirationBpm) ||
+      isNum(overrides.hydrationPct) ||
+      isNum(overrides.bodyTempC) ||
+      isNum(overrides.onsdMm) ||
+      isNum(overrides.ureaMgDl) ||
+      isNum(overrides.calciumMgDl)
   );
 
   let status: Vitals['status'] = 'Nominal';
-  if (spo2Pct < 92 || heartRateBpm >= 120 || onsdMm >= 5.8 || glucoseMgDl <= 68 || glucoseMgDl >= 165) {
+  if (
+    spo2Pct < 92 ||
+    heartRateBpm >= 120 ||
+    systolic >= 150 ||
+    onsdMm >= 5.8 ||
+    glucoseMgDl <= 68 ||
+    glucoseMgDl >= 165 ||
+    renalRisk === 'Early Renal Alert'
+  ) {
     status = 'Critical';
   } else if (
     spo2Pct < 95 ||
     heartRateBpm >= 95 ||
+    systolic >= 132 ||
     onsdMm >= 5.2 ||
     glucoseMgDl <= 76 ||
     glucoseMgDl >= 142 ||
-    hydrationPct < 75
+    hydrationPct < 75 ||
+    renalRisk === 'Watch'
   ) {
     status = 'Advisory';
   }
@@ -99,6 +207,16 @@ export function computeVitals(
     bodyTempC,
     hydrationPct,
     onsdMm,
+    ureaMgDl,
+    calciumMgDl,
+    patchDay,
+    zwitterionicShield,
+    sensorSensitivityPct,
+    afeSignalNa,
+    mlDriftCorrectionPct,
+    batteryPct,
+    renalRisk,
+    manualActive,
     status,
   };
 }

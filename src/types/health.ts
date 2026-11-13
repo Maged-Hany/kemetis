@@ -8,6 +8,24 @@ export interface CheckIn {
   sleep: 'rested' | 'short' | 'post_workout';
 }
 
+export interface ManualVitalsOverride {
+  glucoseMgDl?: number | null;
+  systolic?: number | null;
+  diastolic?: number | null;
+  heartRateBpm?: number | null;
+  spo2Pct?: number | null;
+  respirationBpm?: number | null;
+  hydrationPct?: number | null;
+  bodyTempC?: number | null;
+  onsdMm?: number | null;
+  ureaMgDl?: number | null;
+  calciumMgDl?: number | null;
+  patchDay?: number;
+  zwitterionicShield?: boolean;
+  skinTempC?: number;
+  skinHumidityPct?: number;
+}
+
 export interface OpticalSample {
   redAcDc: number;
   greenAcDc: number;
@@ -36,6 +54,16 @@ export interface Vitals {
   bodyTempC: number;
   hydrationPct: number;
   onsdMm: number;
+  ureaMgDl: number;
+  calciumMgDl: number;
+  patchDay: number;
+  zwitterionicShield: boolean;
+  sensorSensitivityPct: number;
+  afeSignalNa: number;
+  mlDriftCorrectionPct: number;
+  batteryPct: number;
+  renalRisk: 'Normal' | 'Watch' | 'Early Renal Alert';
+  manualActive: boolean;
   status: 'Nominal' | 'Advisory' | 'Critical';
 }
 

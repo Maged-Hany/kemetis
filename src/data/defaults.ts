@@ -1,4 +1,4 @@
-import type { CheckIn, MissionParams, OpticalSample, VoiceSample } from '../types/health';
+import type { CheckIn, ManualVitalsOverride, MissionParams, OpticalSample, VoiceSample } from '../types/health';
 
 export const DEFAULT_OPTICAL: OpticalSample = {
   redAcDc: 0.0094,
@@ -20,6 +20,24 @@ export const DEFAULT_CHECKIN: CheckIn = {
   hydration: 'good',
   head: 'clear',
   sleep: 'rested',
+};
+
+export const DEFAULT_MANUAL_OVERRIDES: ManualVitalsOverride = {
+  glucoseMgDl: null,
+  systolic: null,
+  diastolic: null,
+  heartRateBpm: null,
+  spo2Pct: null,
+  respirationBpm: null,
+  hydrationPct: null,
+  bodyTempC: null,
+  onsdMm: null,
+  ureaMgDl: null,
+  calciumMgDl: null,
+  patchDay: 4,
+  zwitterionicShield: true,
+  skinTempC: 33.6,
+  skinHumidityPct: 46,
 };
 
 export const DEFAULT_MISSION: MissionParams = {

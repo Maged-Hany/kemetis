@@ -1,5 +1,6 @@
 import React from 'react';
 import { AnimatePresence, motion, useScroll, useSpring } from 'motion/react';
+import { LogOut } from 'lucide-react';
 import type { View } from '../types/health';
 import { Logo } from './ui';
 import { formatDuration, useElapsed } from './CallStage';
@@ -9,6 +10,7 @@ interface HeaderProps {
   onView: (view: View) => void;
   callStartedAt: number | null;
   online: boolean | null;
+  onLogout: () => void;
 }
 
 const TABS: Array<{ id: View; label: string }> = [
@@ -16,7 +18,7 @@ const TABS: Array<{ id: View; label: string }> = [
   { id: 'lab', label: 'Lab' },
 ];
 
-export function Header({ view, onView, callStartedAt, online }: HeaderProps) {
+export function Header({ view, onView, callStartedAt, online, onLogout }: HeaderProps) {
   const elapsed = useElapsed(callStartedAt);
   const { scrollYProgress } = useScroll();
   const scaleX = useSpring(scrollYProgress, { stiffness: 280, damping: 32, restDelta: 0.001 });
@@ -104,6 +106,16 @@ export function Header({ view, onView, callStartedAt, online }: HeaderProps) {
               </motion.div>
             )}
           </AnimatePresence>
+
+          <button
+            type="button"
+            onClick={onLogout}
+            title="Sign out"
+            aria-label="Sign out"
+            className="flex h-8 w-8 items-center justify-center rounded-full border border-white/[0.07] bg-[#060606] text-white/45 transition-colors hover:border-white/20 hover:text-white"
+          >
+            <LogOut className="h-3.5 w-3.5" />
+          </button>
         </div>
       </div>
     </header>

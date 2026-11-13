@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { computeVitals, parseCommands, simulateMission } from './physiology';
-import { DEFAULT_OPTICAL, DEFAULT_VOICE } from '../data/defaults';
+import { DEFAULT_CHECKIN, DEFAULT_OPTICAL, DEFAULT_VOICE } from '../data/defaults';
 
 test('computeVitals responds to check-in answers', () => {
   const baseline = computeVitals(DEFAULT_OPTICAL, DEFAULT_VOICE, {
@@ -32,6 +32,32 @@ test('computeVitals prefers a measured camera heart rate', () => {
   const vitals = computeVitals(DEFAULT_OPTICAL, DEFAULT_VOICE, undefined, 71.6);
   assert.equal(vitals.heartRateBpm, 72);
   assert.equal(vitals.heartRateMeasured, true);
+});
+
+test('computeVitals applies manual overrides and detects early renal alert from high urea and low calcium', () => {
+  const vitals = computeVitals(DEFAULT_OPTICAL, DEFAULT_VOICE, DEFAULT_CHECKIN, null, {
+    glucoseMgDl: 158,
+    systolic: 142,
+    diastolic: 88,
+    ureaMgDl: 48,
+    calciumMgDl: 8.1,
+    patchDay: 7,
+    zwitterionicShield: true,
+  });
+
+  assert.equal(vitals.glucoseMgDl, 158);
+  assert.equal(vitals.systolic, 142);
+  assert.equal(vitals.diastolic, 88);
+  assert.equal(vitals.renalRisk, 'Early Renal Alert');
+  assert.equal(vitals.status, 'Critical');
+  assert.equal(vitals.manualActive, true);
+  assert.ok(vitals.sensorSensitivityPct >= 95);
+
+  const unshieldedDay7 = computeVitals(DEFAULT_OPTICAL, DEFAULT_VOICE, DEFAULT_CHECKIN, null, {
+    patchDay: 7,
+    zwitterionicShield: false,
+  });
+  assert.ok(unshieldedDay7.sensorSensitivityPct < 60);
 });
 
 test('simulateMission rewards shielding and countermeasures', () => {

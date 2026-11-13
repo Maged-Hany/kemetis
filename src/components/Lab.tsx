@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { animate, motion } from 'motion/react';
 import { ArrowUpRight, RotateCcw } from 'lucide-react';
 import type { GravityMode, MissionOutput, MissionParams } from '../types/health';
+import { PlanetBackground } from './PlanetBackground';
 import { ParallaxTrack, PressButton, ScrollCanvasFrame, SpotlightCard, StatusDot } from './ui';
 
 interface LabProps {
@@ -104,15 +105,15 @@ function Metric({
       transition={{ delay: 0.04 * index, type: 'spring', stiffness: 320, damping: 28 }}
       whileHover={{ y: -3 }}
     >
-      <SpotlightCard className="h-full rounded-[24px] p-5">
-        <div className="text-[12px] text-white/45">{label}</div>
+      <SpotlightCard className="h-full rounded-[24px] bg-[#050505]/75 p-5 backdrop-blur-md">
+        <div className="text-[12px] text-white/50">{label}</div>
         <div className="mt-3 flex items-baseline gap-1.5">
           <span className="font-mono text-[34px] font-medium leading-none tabular-nums" style={{ color }}>
             <Count value={value} decimals={decimals} />
           </span>
-          <span className="text-[12px] text-white/35">{unit}</span>
+          <span className="text-[12px] text-white/40">{unit}</span>
         </div>
-        <div className="mt-5 h-[3px] overflow-hidden rounded-full bg-white/[0.07]">
+        <div className="mt-5 h-[3px] overflow-hidden rounded-full bg-white/[0.08]">
           <motion.div
             className="h-full rounded-full"
             style={{ backgroundColor: color }}
@@ -127,9 +128,11 @@ function Metric({
 
 export function Lab({ params, output, onChange, onReset, onDiscuss }: LabProps) {
   return (
-    <div className="space-y-8 pb-12">
-      <div className="grid gap-4 lg:grid-cols-[380px_1fr]">
-        <SpotlightCard className="rounded-[28px] p-6">
+    <div className="relative space-y-8 pb-12">
+      <PlanetBackground gravity={params.gravity} />
+
+      <div className="relative z-10 grid gap-4 lg:grid-cols-[380px_1fr]">
+        <SpotlightCard className="rounded-[28px] bg-[#050505]/80 p-6 backdrop-blur-md">
           <div className="flex items-center justify-between">
             <div className="text-[15px] font-medium text-white">Mission</div>
             <PressButton
@@ -142,7 +145,7 @@ export function Lab({ params, output, onChange, onReset, onDiscuss }: LabProps) 
             </PressButton>
           </div>
 
-          <div className="mt-5 grid grid-cols-4 rounded-full border border-white/[0.07] bg-black p-1">
+          <div className="mt-5 grid grid-cols-4 rounded-full border border-white/[0.07] bg-black/80 p-1">
             {GRAVITY.map((g) => {
               const active = params.gravity === g.id;
               return (
@@ -198,11 +201,11 @@ export function Lab({ params, output, onChange, onReset, onDiscuss }: LabProps) 
         </SpotlightCard>
 
         <div className="flex flex-col gap-4">
-          <SpotlightCard className="flex flex-wrap items-center justify-between gap-4 rounded-[28px] px-6 py-5">
+          <SpotlightCard className="flex flex-wrap items-center justify-between gap-4 rounded-[28px] bg-[#050505]/75 px-6 py-5 backdrop-blur-md">
             <div className="flex items-center gap-3">
               <StatusDot status={output.status} />
               <span className="text-[15px] font-medium text-white">{output.status}</span>
-              <span className="text-[13px] text-white/40">
+              <span className="text-[13px] text-white/45">
                 {GRAVITY.find((g) => g.id === params.gravity)?.label} · {params.days} days
               </span>
             </div>
@@ -226,8 +229,8 @@ export function Lab({ params, output, onChange, onReset, onDiscuss }: LabProps) 
         </div>
       </div>
 
-      <ScrollCanvasFrame>
-        <div className="rounded-[28px] border border-white/[0.08] bg-[#040404] p-6">
+      <ScrollCanvasFrame className="relative z-10">
+        <div className="rounded-[28px] border border-white/[0.08] bg-[#040404]/80 p-6 backdrop-blur-md">
           <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/[0.06] pb-4">
             <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-white/40">Limits</span>
             <ParallaxTrack distance={18} className="hidden font-mono text-[11px] text-white/35 sm:block">
@@ -247,7 +250,7 @@ export function Lab({ params, output, onChange, onReset, onDiscuss }: LabProps) 
                 viewport={{ once: true, amount: 0.25 }}
                 transition={{ delay: idx * 0.06, type: 'spring', stiffness: 320, damping: 28 }}
               >
-                <SpotlightCard className="rounded-2xl p-4">
+                <SpotlightCard className="rounded-2xl bg-[#050505]/75 p-4">
                   <div className="flex items-baseline justify-between text-[12px]">
                     <span className="text-white/60">{item.title}</span>
                     <span className="font-mono text-white/35">{item.limit}</span>

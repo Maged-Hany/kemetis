@@ -45,7 +45,7 @@ function systemPrompt(vitals: Vitals, checkIn: CheckIn, mission: MissionParams, 
 Keep replies to 1-3 short sentences. No markdown, no lists, no emojis. Answer what was actually asked. Only mention numbers that matter for the question.
 
 Current readings:
-heart rate ${vitals.heartRateBpm} bpm${vitals.heartRateMeasured ? ' (measured from camera)' : ' (estimated)'}, blood pressure ${vitals.systolic}/${vitals.diastolic}, SpO2 ${vitals.spo2Pct}%, breathing ${vitals.respirationBpm}/min, glucose estimate ${vitals.glucoseMgDl} mg/dL (${vitals.glucoseState}), hydration ${vitals.hydrationPct}%, temperature ${vitals.bodyTempC} C, optic nerve sheath ${vitals.onsdMm} mm, overall ${vitals.status}.
+heart rate ${vitals.heartRateBpm} bpm${vitals.heartRateMeasured ? ' (measured from camera)' : ' (estimated)'}, blood pressure ${vitals.systolic}/${vitals.diastolic}, SpO2 ${vitals.spo2Pct}%, breathing ${vitals.respirationBpm}/min, glucose ${vitals.glucoseMgDl} mg/dL (${vitals.glucoseState}), hydration ${vitals.hydrationPct}%, temperature ${vitals.bodyTempC} C, optic nerve sheath ${vitals.onsdMm} mm, 7-day microneedle patch Day ${vitals.patchDay ?? 4}/7 (sensitivity ${vitals.sensorSensitivityPct ?? 98}%, Urea ${vitals.ureaMgDl ?? 28} mg/dL, Calcium Ca2+ ${vitals.calciumMgDl ?? 9.4} mg/dL, renal status ${vitals.renalRisk ?? 'Normal'}), overall ${vitals.status}.
 Check-in: meal=${checkIn.meal}, hydration=${checkIn.hydration}, head=${checkIn.head}, sleep=${checkIn.sleep}.
 Camera on: ${cameraOn}. Open screen: ${view}. Mission sim: gravity ${mission.gravity}, ${mission.days} days, shielding ${mission.shielding} g/cm2, solar storm ${mission.solarStorm}.
 
@@ -128,6 +128,9 @@ async function askModel(
 
 function offlineReply(message: string, v: Vitals): string {
   const t = message.toLowerCase();
+  if (/urea|calcium|renal|kidney|patch|microneedle|biofouling/.test(t)) {
+    return `Your 7-day microneedle patch is on Day ${v.patchDay ?? 4} at ${v.sensorSensitivityPct ?? 98}% sensitivity, reading Urea ${v.ureaMgDl ?? 28} mg/dL and Calcium ${v.calciumMgDl ?? 9.4} mg/dL (${v.renalRisk ?? 'Normal'}).`;
+  }
   if (/sugar|glucose|ate|meal|hungry|shaky|food/.test(t)) {
     return `Your glucose estimate is about ${v.glucoseMgDl} mg/dL, which reads as ${v.glucoseState.toLowerCase()}. ${
       v.glucoseMgDl < 80 ? 'Grab something with slow carbs soon.' : v.glucoseMgDl > 140 ? 'That should settle within a couple of hours.' : 'Nothing to worry about.'
