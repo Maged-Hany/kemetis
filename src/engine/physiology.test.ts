@@ -1,0 +1,85 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { computeVitals, parseCommands, simulateMission } from './physiology';
+import { DEFAULT_OPTICAL, DEFAULT_VOICE } from '../data/defaults';
+
+test('computeVitals responds to check-in answers', () => {
+  const baseline = computeVitals(DEFAULT_OPTICAL, DEFAULT_VOICE, {
+    meal: 'normal',
+    hydration: 'good',
+    head: 'clear',
+    sleep: 'rested',
+  });
+
+  assert.equal(baseline.status, 'Nominal');
+  assert.ok(baseline.spo2Pct >= 97 && baseline.spo2Pct <= 100);
+  assert.ok(baseline.glucoseMgDl >= 85 && baseline.glucoseMgDl <= 105);
+  assert.equal(baseline.heartRateMeasured, false);
+
+  const stressed = computeVitals(DEFAULT_OPTICAL, DEFAULT_VOICE, {
+    meal: 'just_ate',
+    hydration: 'thirsty',
+    head: 'headache',
+    sleep: 'short',
+  });
+
+  assert.ok(stressed.glucoseMgDl > baseline.glucoseMgDl);
+  assert.ok(stressed.onsdMm > baseline.onsdMm);
+  assert.ok(stressed.hydrationPct < baseline.hydrationPct);
+});
+
+test('computeVitals prefers a measured camera heart rate', () => {
+  const vitals = computeVitals(DEFAULT_OPTICAL, DEFAULT_VOICE, undefined, 71.6);
+  assert.equal(vitals.heartRateBpm, 72);
+  assert.equal(vitals.heartRateMeasured, true);
+});
+
+test('simulateMission rewards shielding and countermeasures', () => {
+  const unprotected = simulateMission({
+    gravity: '0g',
+    days: 360,
+    shielding: 10,
+    solarStorm: true,
+    lbnpMin: 0,
+    exerciseMin: 0,
+    co2MmHg: 4.8,
+  });
+  const protectedMars = simulateMission({
+    gravity: '0.38g',
+    days: 360,
+    shielding: 40,
+    solarStorm: false,
+    lbnpMin: 45,
+    exerciseMin: 75,
+    co2MmHg: 2.2,
+  });
+
+  assert.ok(protectedMars.totalDoseMsv < unprotected.totalDoseMsv);
+  assert.ok(protectedMars.onsdMm < unprotected.onsdMm);
+  assert.ok(protectedMars.monthlyBoneLossPct < unprotected.monthlyBoneLossPct);
+  assert.equal(unprotected.status, 'Critical');
+});
+
+test('parseCommands maps speech to actions', () => {
+  const actions = parseCommands('Open the lab, I just ate and feel thirsty, set 450 days, and turn on camera');
+  assert.deepEqual(actions, [
+    { type: 'SWITCH_VIEW', view: 'lab' },
+    { type: 'UPDATE_CHECKIN', patch: { meal: 'just_ate', hydration: 'thirsty' } },
+    { type: 'SET_CAMERA', enabled: true },
+    { type: 'UPDATE_MISSION', patch: { days: 450 } },
+  ]);
+});
+
+test('parseCommands does not confuse microgravity with the microphone', () => {
+  const actions = parseCommands('start a microgravity run');
+  assert.deepEqual(actions, [{ type: 'SET_GRAVITY', gravity: '0g' }]);
+});
+
+test('parseCommands handles mic mute and unmute', () => {
+  assert.deepEqual(parseCommands('mute my mic'), [{ type: 'SET_MIC', enabled: false }]);
+  assert.deepEqual(parseCommands('unmute the microphone'), [{ type: 'SET_MIC', enabled: true }]);
+});
+
+test('parseCommands switches back to call view', () => {
+  assert.deepEqual(parseCommands('switch to call'), [{ type: 'SWITCH_VIEW', view: 'call' }]);
+});

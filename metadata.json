@@ -1,0 +1,6 @@
+{
+  "name": "kemetis",
+  "description": "Autonomous spaceflight health monitoring software and live vision-and-voice call studio built on NASA HRP and CSA space radiation research.",
+  "requestFramePermissions": ["camera", "microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
